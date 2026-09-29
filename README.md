@@ -2,429 +2,181 @@
 
 # ExecSQL-Agent
 
-### Execution-grounded Text-to-SQL Agent with Tool Calling, QLoRA SFT & Verifiable Evaluation
+### Execution-grounded Text-to-SQL Agent with Tool Calling, QLoRA SFT and Verifiable Evaluation
 
-**让模型不只是“生成 SQL”，而是主动探索数据库、执行查询、观察反馈、修复错误，并用真实执行结果验证答案。**
-
-`Discover → Reason → Execute → Observe → Repair → Verify`
-
-<br>
+让模型不只是生成 SQL，而是主动探索数据库、执行查询、观察反馈、修复错误，并用真实执行结果验证答案。
 
 <p>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/Model-Qwen3--8B-6C5CE7?style=flat-square" alt="Qwen3-8B">
   <img src="https://img.shields.io/badge/Inference-vLLM-00A67E?style=flat-square" alt="vLLM">
-  <img src="https://img.shields.io/badge/SFT-4--bit%20QLoRA-F39C12?style=flat-square" alt="QLoRA">
+  <img src="https://img.shields.io/badge/SFT-4--bit%20QLoRA-F39C12?style=flat-square" alt="4-bit QLoRA">
   <img src="https://img.shields.io/badge/Database-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
-  <img src="https://img.shields.io/badge/Tests-210%20passed-2EA44F?style=flat-square" alt="210 tests">
 </p>
 
-<p>
-  <img src="https://img.shields.io/badge/SFT-complete-2EA44F?style=flat-square" alt="SFT complete">
-  <img src="https://img.shields.io/badge/Evaluation-complete-2EA44F?style=flat-square" alt="Evaluation complete">
-  <img src="https://img.shields.io/badge/Agentic%20RLVR-experimental-F39C12?style=flat-square" alt="RLVR experimental">
-</p>
+<img src="docs/assets/execsql-agent-hero.png" width="100%" alt="ExecSQL-Agent multi-database agent illustration">
 
 <p>
-  <a href="#-why-execsql-agent">Why</a> ·
-  <a href="#-how-it-works">Architecture</a> ·
-  <a href="#-benchmark">Benchmark</a> ·
-  <a href="#-quickstart">Quickstart</a> ·
-  <a href="#-training">Training</a> ·
-  <a href="#-evaluation">Evaluation</a>
+  <a href="#项目概览">项目概览</a> ·
+  <a href="#核心能力">核心能力</a> ·
+  <a href="#实验结果">实验结果</a> ·
+  <a href="#sft-数据与训练">SFT</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#离线评测">离线评测</a>
 </p>
 
 </div>
-
----
-
-<table>
-<tr>
-<td align="center" width="25%">
-  <strong>37.43%</strong><br>
-  <sub>SQL Execution Accuracy</sub>
-</td>
-<td align="center" width="25%">
-  <strong>+14.00pp</strong><br>
-  <sub>SFT vs. Base</sub>
-</td>
-<td align="center" width="25%">
-  <strong>943</strong><br>
-  <sub>Held-out Eval Cases</sub>
-</td>
-<td align="center" width="25%">
-  <strong>210</strong><br>
-  <sub>Regression Tests</sub>
-</td>
-</tr>
-</table>
 
 > [!IMPORTANT]
 > **当前稳定主线为 SQL Agent + QLoRA SFT + execution-based evaluation。**
 >
 > Agentic GRPO / RLVR 已具备 verifier、数据适配与 VERL diagnostic 链路，但尚未形成正式 Qwen3-8B GRPO benchmark，因此本仓库不声明 GRPO 模型效果。
 
----
+## 项目概览
 
-## ✨ Why ExecSQL-Agent?
+ExecSQL-Agent 不是一次性完成“问题到 SQL”映射的脚本，而是一个面向真实数据库交互的多轮 SQL Agent。模型会根据问题与当前上下文动态发现表、检索 Schema、生成并校验 SQL，再利用真实 SQLite 执行结果继续回答或修复错误。
 
-传统 Text-to-SQL 系统通常把任务处理成一次生成：
-
-```text
-Question → SQL
-```
-
-ExecSQL-Agent 将它建模为一个**可执行的 Agent trajectory**：
-
-```text
-Question
-   ↓
-Discover Schema
-   ↓
-Generate / Validate SQL
-   ↓
-Execute on Real Database
-   ↓
-Observe Result or Error
-   ↓
-Repair if Needed
-   ↓
-Grounded Final Answer
-```
-
-<table>
-<tr>
-<td width="25%" valign="top">
-
-### 🧭 Dynamic Agent Loop
-
-模型动态决定是否：
-
-- `list_tables`
-- `inspect_schema`
-- `validate_sql`
-- `execute_sql`
-
-运行时不是固定 SQL pipeline。
-
-</td>
-<td width="25%" valign="top">
-
-### 🛡️ Safe Execution
-
-严格限制为只读 SQLite：
-
-- Tool allowlist
-- JSON Schema validation
-- SQL safety validation
-- read-only connection
-- timeout / progress guard
-
-</td>
-<td width="25%" valign="top">
-
-### 🔁 Execution Feedback
-
-数据库反馈重新进入 Agent 上下文：
-
-- Schema error
-- SQL error
-- Invalid arguments
-- Execution result
-
-模型可以继续修复，而不是一次失败即结束。
-
-</td>
-<td width="25%" valign="top">
-
-### 🧪 Verifiable Evaluation
-
-不是让另一个 LLM 判断 SQL 好不好。
-
-预测 SQL 与 scorer-side reference SQL 都在真实 SQLite 上执行，并比较完整结果集合。
-
-</td>
-</tr>
-</table>
+项目使用 Qwen3-8B 作为基础模型，通过 vLLM 的 OpenAI-compatible API 提供推理服务。在线 Agent、数据库工具、离线评测、SFT 数据构造与 RLVR verifier 复用相同的 ToolRegistry 和 SQLite 执行边界，避免训练、评测与运行时各自维护一套数据库逻辑。
 
 核心实现：
 
-- [`FunctionCallingAgent`](src/execsql_agent/agents/function_calling.py)
-- [`ToolRegistry`](src/execsql_agent/tools/registry.py)
-- [`SQLValidator`](src/execsql_agent/tools/sql_validator.py)
-- [`SQLExecutor`](src/execsql_agent/tools/sql_executor.py)
-- [`Evaluator`](src/execsql_agent/evaluation/evaluator.py)
-- [`Metrics`](src/execsql_agent/evaluation/metrics.py)
+- [FunctionCallingAgent](src/execsql_agent/agents/function_calling.py)：多轮 Tool Calling 与 Agent 状态机
+- [ToolRegistry](src/execsql_agent/tools/registry.py)：工具注册、参数校验、调用调度与结果回填
+- [SQLValidator](src/execsql_agent/tools/sql_validator.py)：只读 SQL 安全校验
+- [SQLExecutor](src/execsql_agent/tools/sql_executor.py)：受限 SQLite 执行
+- [Evaluator](src/execsql_agent/evaluation/evaluator.py)：离线评测与报告生成
 
----
+## 核心能力
 
-## 🧠 How It Works
+### Dynamic Agent Loop
 
-```mermaid
-sequenceDiagram
-    autonumber
+模型每轮都会接收 System Prompt、用户问题、Session Context、历史 Tool Calls 和真实 Tool Observations，并动态决定下一步操作。运行时并不强制所有问题采用同一条固定流水线。
 
-    actor U as User
-    participant A as Qwen3 Agent
-    participant T as ToolRegistry
-    participant DB as Read-only SQLite
+Agent Loop 支持：
 
-    U->>A: Natural-language question
+- native Tool Calling 与 JSON fallback；
+- 多轮、多工具调用及 Observation 回填；
+- 无状态重复 Tool Call 与重复 SQL 检测；
+- 不安全 SQL 和最大 Agent step 终止；
+- **Completion Guard**：模型尚未取得数据库证据便提前回答时，引导其继续使用工具；
+- 基于 Session ID 隔离的短期多轮记忆。
 
-    A->>T: list_tables()
-    T->>DB: Discover available tables
-    DB-->>A: Table list
+### 四个结构化数据库工具
 
-    A->>T: inspect_schema(...)
-    T->>DB: Read schema / PK / FK
-    DB-->>A: Schema observation
-
-    A->>T: validate_sql(...)
-    T-->>A: Validation result
-
-    A->>T: execute_sql(...)
-    T->>DB: Execute read-only query
-    DB-->>A: Rows or SQLite error
-
-    alt execution needs repair
-        A->>T: inspect / validate / execute again
-        T->>DB: Re-run corrected SQL
-        DB-->>A: Updated observation
-    else sufficient evidence
-        A-->>U: Grounded final answer
-    end
-```
-
-### Agent runtime
-
-模型每轮接收：
-
-```text
-System Prompt
-+ User Question
-+ Session Context
-+ Previous Tool Calls
-+ Real Tool Observations
-```
-
-并动态决定下一步行动。
-
-运行时还包含：
-
-- native Tool Calling + JSON fallback；
-- 无状态重复 Tool Call 检测；
-- 重复 SQL 检测；
-- 不安全 SQL 终止；
--最大 Agent step 限制；
-- **Completion Guard**：模型尚未真正得到数据库证据就提前回答时，引导其继续使用工具；
-- Session ID 隔离的短期多轮记忆。
-
----
-
-## 🛠️ Four Structured Tools
-
-| Tool | Purpose |
+| Tool | 作用 |
 |---|---|
 | `list_tables` | 在未知数据库中发现可用表 |
-| `inspect_schema` | 查看字段、主键与外键 |
-| `validate_sql` | 对单条只读 SQLite 查询进行静态 / 编译期校验 |
-| `execute_sql` | 在受限只读 SQLite 环境中执行 SQL |
+| `inspect_schema` | 查看字段、主键与外键关系 |
+| `validate_sql` | 对单条只读 SQLite 查询进行静态与编译期校验 |
+| `execute_sql` | 在受限只读连接中执行 SQL，并返回结构化结果或错误 |
 
-所有工具统一经过 `ToolRegistry`：
+所有模型可见工具均由 ToolRegistry 提供严格 JSON Schema、参数校验和统一调度。工具 Observation 会进入下一轮模型上下文，但可信数据库路径和评分侧信息不会暴露给模型。
 
-```mermaid
-flowchart LR
-    A[LLM Tool Call] --> V[JSON Schema Validation]
-    V --> R{Allowlisted?}
-    R -->|No| X[Reject]
-    R -->|Yes| S[SQL Safety Check]
-    S -->|Unsafe| X
-    S -->|Safe| E[Read-only Execution]
-    E --> O[Structured Observation]
-    O --> A
-```
+### Execution Feedback 与修复
 
-### SQL safety boundary
+SQLite 执行结果、SQL 异常和工具参数错误会作为 Observation 回传。Agent 可以据此重新检查 Schema、修复字段或表名、调整 SQL 并再次执行，而不是一次失败即结束。
 
-Agent 只能执行单条只读 `SELECT` / `WITH` 查询。
+系统分别记录首次执行、最终执行、有效修复、重复调用、协议完成和结果正确性，因此“SQL 能够执行”与“SQL 语义正确”不会被混为同一指标。
 
-运行时同时使用：
+### 只读执行边界
 
-`static validation`
-→ `SQLite read-only URI`
-→ `query_only`
-→ `authorizer`
-→ `progress handler`
-→ `wall-clock timeout`
+Agent 只能执行单条只读 `SELECT` / `WITH` 查询。运行时同时使用静态校验、SQLite read-only URI、`query_only`、authorizer、progress handler 与 wall-clock timeout。DDL、DML、`ATTACH` 和危险 `PRAGMA` 不会进入正常执行路径。
 
-DDL、DML、`ATTACH`、危险 `PRAGMA` 等操作不会进入正常执行路径。
+## 系统设计
 
----
+项目按职责划分为三个相互复用的层次：
 
-## 📊 Benchmark
+1. **Agent Runtime**：Qwen3 通过 OpenAI-compatible 接口完成多轮 Tool Calling，Session Memory 维护隔离的会话上下文。
+2. **Structured Tool Layer**：ToolRegistry 统一提供表发现、Schema 检索、SQL 校验与只读执行，将结构化 Observation 回填给 Agent。
+3. **Offline Evaluation & Post-training**：Trajectory Logger 记录完整交互，Evaluator 通过私有评分信息完成结果等价性评测；SFT 与 RLVR 数据构造复用真实工具输出。
 
-正式 Base / SFT 对照实验使用从 BIRD Train 按 **database-level split** 构造的 held-out evaluation set：
+Gold SQL、expected result、数据库路径和 scorer metadata 均位于私有评分侧，不会注入 Agent 的 system/user prompt。训练、评测与推理共享同一套工具协议，使离线学习目标与线上 Agent 行为保持一致。
 
-<table>
-<tr>
-<td align="center"><strong>943</strong><br><sub>Evaluation Cases</sub></td>
-<td align="center"><strong>7</strong><br><sub>Unseen Databases</sub></td>
-<td align="center"><strong>Qwen3-8B</strong><br><sub>Base Model</sub></td>
-<td align="center"><strong>QLoRA</strong><br><sub>SFT Adapter</sub></td>
-</tr>
-</table>
+## 实验结果
 
-Base 与 SFT 使用完全相同的：
+正式 Base / SFT 对照使用从 BIRD Train 按数据库级隔离构造的 held-out evaluation split，共 **943 个样本，覆盖 7 个训练阶段未见数据库**。
 
-- evaluation cases 与顺序；
-- system prompt；
-- 四个 Tool Schema；
-- ToolRegistry；
-- SQLite databases；
-- evaluator；
-- decoding configuration。
+两组实验使用完全相同的 case 顺序、system prompt、Tool Schema、ToolRegistry、SQLite databases、decoding configuration 和 evaluator。唯一主要变量是是否加载正式 SFT LoRA Adapter。
 
-**唯一主要变量：是否加载正式 SFT LoRA Adapter。**
-
-### Results
-
-| Metric | Qwen3-8B Base | Qwen3-8B + SFT | Δ |
+| Metric | Qwen3-8B Base | Qwen3-8B + SFT | Change |
 |---|---:|---:|---:|
-| **SQL Execution Accuracy** | 23.44% | **37.43%** | **+14.00pp** |
+| **SQL Execution Accuracy** | 23.44% (221/943) | **37.43% (353/943)** | **+14.00pp** |
 | Protocol Completion | 63.84% | **81.55%** | **+17.71pp** |
 | First Execution Success | 57.79% | **81.97%** | **+24.18pp** |
 | Final Execution Success | 67.44% | **88.02%** | **+20.57pp** |
 | no-final-SQL | 149 | **14** | **-90.6%** |
 
 > [!NOTE]
-> **SFT 最明显的提升不仅是最终准确率。**
->
-> 它同时显著改善了工具协议遵循、Schema 交互和 SQL 可执行性，使剩余错误更多集中到真正困难的 **SQL semantic mismatch**，而不是 Agent 基础设施失败。
+> SFT 不仅提升最终准确率，也显著改善了工具协议遵循、Schema 交互和 SQL 可执行性。训练后，剩余错误更多集中在真正困难的 SQL semantic mismatch，而不是 Agent 基础设施失败。
 
 <details>
-<summary><strong>📐 Metric definitions</strong></summary>
+<summary><strong>查看指标定义</strong></summary>
 
-<br>
-
-**SQL Execution Accuracy**
-
-预测 SQL 和 scorer-side reference SQL 分别在真实 SQLite 上执行，并比较完整结果集合是否等价。
-
-**Protocol Completion**
-
-Agent 正常完成多轮工具协议，并到达有效最终状态。
-
-**First Execution Success**
-
-第一次 `execute_sql` 即成功执行。
-
-**Final Execution Success**
-
-trajectory 结束前存在最终成功执行结果。它代表 SQL 可以执行，但不等同于语义一定正确。
+- **SQL Execution Accuracy**：预测 SQL 与 scorer-side reference SQL 分别在真实 SQLite 上执行，并比较完整结果集合是否等价。
+- **Protocol Completion**：Agent 正常完成多轮工具协议并到达有效最终状态。
+- **First Execution Success**：第一次 `execute_sql` 即成功执行。
+- **Final Execution Success**：trajectory 结束前存在最终成功执行结果，代表 SQL 可以执行，但不等同于语义一定正确。
 
 </details>
 
-> 以上结果来自项目冻结的 database-level held-out split，**不是 BIRD 官方 Test leaderboard 成绩**。
+以上结果来自项目冻结的 database-level held-out split，不是 BIRD 官方 Test leaderboard 成绩。
 
----
+## SFT 数据与训练
 
-## 🔥 From Agent Trajectories to SFT
+### 数据隔离与 Expert Trajectories
 
-训练不是简单的：
+训练数据基于 BIRD Train 构建，并按 `database_id` 完成数据库级划分，而不是对问题随机切分：
 
-```text
-Question → Gold SQL
-```
-
-而是构造真实多轮 Agent trajectory：
-
-```mermaid
-flowchart LR
-    Q[Question] --> A1[Assistant Tool Call]
-    A1 --> T1[Real Tool Observation]
-    T1 --> A2[Assistant Tool Call]
-    A2 --> T2[Real SQLite Result]
-    T2 --> AF[Assistant Final Answer]
-
-    AF --> P[Assistant-only Preprocessing]
-    P --> S[QLoRA SFT]
-```
-
-训练数据中的 Schema、validation 与 execution observations 都来自真实 ToolRegistry / SQLite。
-
-### Dataset
+- 61 个数据库用于训练数据候选池；
+- 7 个完整数据库作为 held-out evaluation split；
+- 训练数据库与 held-out 数据库不重叠；
+- BIRD Mini-Dev 不参与 SFT 或 GRPO 参数更新。
 
 | Split | Expert Trajectories | Assistant-turn Samples |
 |---|---:|---:|
 | Train | **2,500** | **12,246** |
 | Dev | **110** | **540** |
 
-训练数据库和 held-out evaluation databases 按 `database_id` 隔离。
-
-BIRD Mini-Dev 不参与参数更新。
+每条 Expert Agent Trajectory 的 Schema、validation 与 execution observations 均来自真实 ToolRegistry 和 SQLite。数据构造执行 physical-table check、Gold SQL execution、tool-call/result pairing、oracle leakage scan 与 4,096-token hard-stop；任一硬条件失败时不会生成最终训练样本。
 
 ### Assistant-only supervision
 
-每条多轮 trajectory 会展开为 Assistant-turn training samples：
+一条多轮 trajectory 会按 assistant turn 展开为多个监督样本：
 
-```text
-system       → masked
-user         → masked
-tool result  → masked
-assistant    → supervised
-```
+- system、user 和 tool observation tokens 全部 mask；
+- assistant tool-call、SQL action 与 final-answer tokens 参与 loss；
+- 后续 assistant turn 可以读取此前真实工具结果，但这些上下文 token 不参与监督损失。
 
-也就是说：
+### QLoRA 配置
 
-> 模型可以读取真实 Tool Observation 作为上下文，但 loss 只计算 assistant 自己应该产生的 Tool Call、SQL action 和 final answer。
-
-核心实现：
-
-- [`build_bird_sft_dataset.py`](training/build_bird_sft_dataset.py)
-- [`assistant_turn_preprocessing.py`](training/assistant_turn_preprocessing.py)
-- [`train_qlora_sft_full.py`](training/train_qlora_sft_full.py)
+正式 SFT 使用 Transformers、PEFT 与 bitsandbytes 对 Qwen3-8B 进行 4-bit QLoRA，训练 1 epoch，共 3,062 optimizer steps。
 
 <details>
-<summary><strong>⚙️ QLoRA configuration</strong></summary>
-
-<br>
+<summary><strong>查看训练配置与结果</strong></summary>
 
 | Configuration | Value |
 |---|---|
-| Base model | Qwen3-8B |
-| Epoch | 1 |
 | Quantization | NF4 + double quantization |
 | Compute dtype | BF16 |
-| LoRA | r=16, alpha=32, dropout=0.05 |
-| Target | all-linear |
-| Max length | 4096 |
+| LoRA | r=16, alpha=32, dropout=0.05, all-linear |
+| Max length | 4,096 |
 | Batch size | 1 |
 | Gradient accumulation | 4 |
 | Learning rate | 2e-4 |
 | Optimizer | paged_adamw_8bit |
 | Scheduler | cosine |
-| Global steps | 3,062 |
-
-Training run:
-
-| Metric | Value |
-|---|---:|
-| Training loss | `0.06396` |
-| Final Dev loss | `0.04622` |
-| Peak allocated VRAM | `18.39 GiB` |
-| Peak reserved VRAM | `30.44 GiB` |
-
-训练流程同时记录 Git revision、输入数据 SHA256、Tool Schema SHA256、基础模型信息、超参数和运行环境，以便追踪实验来源。
-
-模型权重和 LoRA Adapter 不包含在本仓库中。
+| Training loss | 0.06396 |
+| Final Dev loss | 0.04622 |
+| Peak allocated VRAM | 18.39 GiB |
+| Peak reserved VRAM | 30.44 GiB |
 
 </details>
 
----
+训练流程同时记录 Git revision、输入数据 SHA256、Tool Schema SHA256、基础模型信息、超参数和运行环境。模型权重与正式 LoRA Adapter 不包含在本仓库中。
 
-## ⚡ Quickstart
+## 快速开始
 
-### 1. Install
+### 安装
 
 ```bash
 git clone https://github.com/zbwsth/execsql-agent.git
@@ -437,16 +189,9 @@ python -m pip install -U pip
 python -m pip install -e ".[dev]"
 ```
 
-要求：
+环境要求为 Python 3.11+ 与 SQLite。本地 deterministic demo 和完整 CPU 测试不需要 GPU。
 
-```text
-Python >= 3.11
-SQLite
-```
-
-### 2. Run the deterministic demo
-
-不需要 GPU，也不需要真实模型 API：
+### 运行 deterministic demo
 
 ```bash
 python scripts/create_demo_database.py
@@ -457,20 +202,10 @@ python -m execsql_agent.cli run \
   --question "查询已完成订单中消费金额最高的五位客户"
 ```
 
-该模式使用 deterministic FakeLLM，用于快速验证：
-
-`Agent Loop`
-→ `Tool Calling`
-→ `Execution Feedback`
-→ `SQL Repair`
-→ `Trajectory Logging`
-
-它用于系统回归测试，**不代表真实模型能力**。
+该模式使用 deterministic FakeLLM，适合验证 Agent Loop、错误回填、SQL 修复和 trajectory logging，不代表真实模型能力。
 
 <details>
-<summary><strong>🤖 Connect to vLLM / OpenAI-compatible inference</strong></summary>
-
-<br>
+<summary><strong>接入 vLLM / OpenAI-compatible 推理服务</strong></summary>
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
@@ -485,58 +220,27 @@ python -m execsql_agent.cli run \
   --max-steps 6
 ```
 
-LLM client 支持：
-
-- request timeout；
-- bounded retry；
-- native Tool Calling；
-- JSON fallback；
-- 显式关闭 Qwen thinking mode。
+LLM client 支持请求超时、有限重试、native Tool Calling、JSON fallback 与显式关闭 Qwen thinking mode。
 
 </details>
 
----
+## 离线评测
 
-## 🧪 Evaluation
+Evaluator 直接消费完整 Agent trajectory，提取候选 SQL，并在真实 SQLite 上比较预测结果与 scorer-side reference result。它不使用 LLM judge。
 
-离线 evaluator 直接消费完整 Agent trajectory。
-
-```mermaid
-flowchart LR
-    A[Agent Trajectory] --> P[Predicted SQL]
-    G[Private Gold Cache] --> R[Reference Result]
-
-    P --> DB1[(SQLite)]
-    DB1 --> PR[Prediction Result]
-
-    PR --> C[Result Comparator]
-    R --> C
-
-    C --> M[Metrics]
-    M --> J[JSON]
-    M --> CSV[CSV]
-    M --> MD[Markdown Report]
-```
-
-Gold SQL、expected result、database path 与 scorer metadata 均位于 **private scorer side**，不会注入模型 prompt。
-
-Evaluator 支持：
+支持能力包括：
 
 - real SQLite result-based scoring；
-- 多数据库路径解析；
-- database fingerprint validation；
-- Gold Cache；
-- checkpoint / resume；
-- evaluation configuration fingerprint；
-- failure taxonomy；
-- database-level statistics；
-- tool usage statistics；
-- JSON / CSV / Markdown reports。
+- 多数据库路径解析与 database fingerprint validation；
+- scorer-side Gold Cache；
+- checkpoint / resume 与配置指纹检查；
+- failure taxonomy、数据库维度与工具使用统计；
+- JSON、CSV 与 Markdown 报告。
+
+Gold SQL、expected result、database path 和 scorer metadata 始终位于私有评分侧。
 
 <details>
-<summary><strong>▶️ Run synthetic evaluation</strong></summary>
-
-<br>
+<summary><strong>运行 synthetic evaluation</strong></summary>
 
 ```bash
 python scripts/create_demo_database.py
@@ -552,18 +256,9 @@ python -m execsql_agent.cli evaluate \
 </details>
 
 <details>
-<summary><strong>🐦 Run BIRD evaluation</strong></summary>
+<summary><strong>运行 BIRD evaluation</strong></summary>
 
-<br>
-
-BIRD annotations 和 SQLite databases 需要从官方来源自行准备。
-
-本仓库不分发：
-
-- BIRD databases；
-- Gold SQL；
-- private Gold Cache；
--完整 benchmark outputs。
+BIRD annotations 与 SQLite databases 需要从官方来源自行准备。本仓库不分发 BIRD databases、Gold SQL、private Gold Cache 或完整 benchmark outputs。
 
 ```bash
 python -m execsql_agent.cli evaluate \
@@ -578,17 +273,13 @@ python -m execsql_agent.cli evaluate \
   --real-model
 ```
 
-冻结评测协议：
-
-[`config/bird_eval_protocol.json`](config/bird_eval_protocol.json)
+冻结评测协议见 [config/bird_eval_protocol.json](config/bird_eval_protocol.json)。
 
 </details>
 
----
+## 训练入口
 
-## 🎯 Training
-
-### Generic SFT trajectory builder
+### 通用 SFT trajectory builder
 
 ```bash
 python training/build_sft_dataset.py \
@@ -599,7 +290,7 @@ python training/build_sft_dataset.py \
   --tools-output /path/to/tools.json
 ```
 
-### Validate assistant-only preprocessing
+### Assistant-only preprocessing 检查
 
 ```bash
 python training/assistant_turn_preprocessing.py \
@@ -622,115 +313,45 @@ python training/train_qlora_sft_full.py \
   --learning-rate 2e-4
 ```
 
-> Core Agent dependencies 与 GPU training dependencies 有意分离。训练环境需要自行安装与目标 CUDA 版本兼容的 PyTorch、Transformers、PEFT、bitsandbytes 和 Accelerate。
+核心 Agent 依赖与 GPU training dependencies 有意分离。训练环境需要自行安装与目标 CUDA 版本兼容的 PyTorch、Transformers、PEFT、bitsandbytes 和 Accelerate。
 
----
+## Agentic RLVR / GRPO
 
-## 🧬 Agentic RLVR / GRPO
+Agentic RLVR 是当前实验方向，而不是仓库已经完成的模型效果结论。当前已有 SQL response parser、execution verifier、BIRD agentic dataset adapter、VERL ToolAgentLoop integration、execution-based reward 与 Qwen3-0.6B single-step diagnostic。
 
-Agentic RLVR 是当前实验分支，而不是仓库已经完成的模型效果结论。
+当前保留两种 diagnostic reward view：
 
-已有组件包括：
+- **R1**：结果完全等价为 1，否则为 0；
+- **R2**：结果等价为 1，可执行但错误为 0.2，其他为 0。
 
-```text
-Agent rollout
-     ↓
-Tool interaction
-     ↓
-SQLite execution
-     ↓
-Execution Verifier
-     ↓
-Reward
-     ↓
-VERL / GRPO
-```
+目前没有正式 Qwen3-8B Agentic GRPO checkpoint 或 benchmark improvement claim。更多信息见 [Qwen3-0.6B GRPO diagnostic](docs/experiments/qwen3_0.6b_grpo_diagnostic.md)。
 
-仓库已经包含：
+## 项目结构
 
-- SQL response parser；
-- execution verifier；
-- BIRD agentic dataset adapter；
-- VERL ToolAgentLoop integration；
-- execution-based reward；
-- Qwen3-0.6B single-step diagnostic。
-
-Reward prototype：
-
-```text
-R1
-exact result equivalence → 1
-otherwise                → 0
-
-R2
-exact result equivalence → 1.0
-executable but incorrect → 0.2
-otherwise                → 0.0
-```
-
-目前 **没有正式 Qwen3-8B Agentic GRPO checkpoint 或 benchmark improvement claim**。
-
-Diagnostic：
-
-[`docs/experiments/qwen3_0.6b_grpo_diagnostic.md`](docs/experiments/qwen3_0.6b_grpo_diagnostic.md)
-
----
-
-## 📦 Repository Structure
-
-<details open>
-<summary><strong>Project tree</strong></summary>
-
-<br>
+<details>
+<summary><strong>展开项目目录</strong></summary>
 
 ```text
 execsql-agent/
-│
 ├── src/execsql_agent/
-│   ├── agents/
-│   │   ├── function_calling.py   # Dynamic Tool Calling Agent
-│   │   └── pipeline.py           # Deterministic pipeline baseline
-│   │
-│   ├── tools/
-│   │   ├── registry.py           # Tool definitions + validation + dispatch
-│   │   ├── schema_loader.py      # SQLite schema discovery
-│   │   ├── sql_validator.py      # Read-only SQL safety validation
-│   │   └── sql_executor.py       # Bounded SQLite execution
-│   │
-│   ├── evaluation/
-│   │   ├── evaluator.py          # Offline evaluation orchestration
-│   │   ├── comparator.py         # Result equivalence
-│   │   ├── metrics.py            # Metric aggregation
-│   │   └── reports.py            # JSON / CSV / Markdown reports
-│   │
-│   ├── trajectory/
-│   │   ├── logger.py             # Structured trajectory logging
-│   │   └── memory.py             # Session memory
-│   │
-│   └── rlvr/
-│       ├── response_parser.py
-│       └── verifier.py
-│
-├── training/
-│   ├── build_bird_sft_dataset.py
-│   ├── assistant_turn_preprocessing.py
-│   ├── train_qlora_sft_full.py
-│   ├── build_bird_grpo_agentic_dataset.py
-│   └── verl_*.py
-│
-├── scripts/
-├── config/
-├── configs/
-├── docs/
-├── tests/
-└── data/
+│   ├── agents/          # Tool Calling Agent 与 pipeline baseline
+│   ├── llm/             # FakeLLM 与 OpenAI-compatible client
+│   ├── tools/           # ToolRegistry、Schema、Validator、Executor
+│   ├── evaluation/      # Dataset adapter、scorer、metrics、reports
+│   ├── trajectory/      # Structured logging 与 Session Memory
+│   └── rlvr/            # SQL response parser 与 execution verifier
+├── training/            # SFT/GRPO 数据构造、预处理与训练入口
+├── scripts/             # Demo、BIRD preflight、rescore 与 diagnostics
+├── config/              # 冻结评测协议
+├── configs/             # Runtime / VERL 配置
+├── tests/               # CPU regression 与 contract tests
+├── data/synthetic/      # 可公开的合成评测 fixture
+└── data/grpo_smoke/     # DEV-only GRPO diagnostic fixture
 ```
 
 </details>
 
----
-
-## ✅ Quality
+## 质量保证
 
 ```bash
 pytest
@@ -739,64 +360,27 @@ mypy
 git diff --check
 ```
 
-当前公开版本：
+当前公开版本包含 210 个通过的测试与 4 个跳过项。测试覆盖 Tool Schema、参数校验、SQL 安全边界、多轮工具协议、Completion Guard、Session 隔离、BIRD scoring、评测续跑、Assistant-only masking、数据泄漏检查和 RLVR verifier。
 
-```text
-210 passed
-4 skipped
-Ruff: passed
-mypy: passed
-```
+## 范围与限制
 
-测试覆盖：
-
-`Tool Schema`
-· `argument validation`
-· `SQL safety`
-· `multi-turn tool protocol`
-· `Completion Guard`
-· `session isolation`
-· `BIRD scoring`
-· `evaluation resume`
-· `assistant-only masking`
-· `data leakage checks`
-· `RLVR verifier`
-
----
-
-## ⚠️ Scope & Limitations
-
-当前版本明确限定：
-
-- 数据库后端为 **SQLite**；
-- Agent 对数据库只有 **read-only access**；
+- 当前数据库后端为 SQLite；
+- Agent 只有 read-only access；
 - CLI 当前为同步执行；
-- 本仓库不包含 Qwen3 权重或正式 SFT Adapter；
-- 不包含 BIRD 原始数据、Gold SQL 或 private Gold Cache；
-- benchmark 来自项目冻结的 database-level held-out split；
-- 不将该结果描述为 BIRD 官方 Test leaderboard；
-- Agentic GRPO 仍处于实验阶段。
+- 仓库不包含 Qwen3 权重、正式 SFT Adapter 或 BIRD 原始数据；
+- 正式结果来自项目自建 database-level held-out split，不代表 BIRD 官方 Test leaderboard；
+- Agentic GRPO 尚未形成正式效果结论。
 
----
+## Acknowledgements
 
-## 🙏 Acknowledgements
-
-ExecSQL-Agent builds on the open-source ecosystem around:
-
-**Qwen3 · vLLM · BIRD · Transformers · PEFT · bitsandbytes · VERL**
+ExecSQL-Agent builds on Qwen3, vLLM, BIRD, Transformers, PEFT, bitsandbytes and VERL.
 
 ---
 
 <div align="center">
 
-### ExecSQL-Agent
+**ExecSQL-Agent · Tool-augmented Text-to-SQL with execution feedback**
 
-**Tool-augmented Text-to-SQL with execution feedback and verifiable training.**
-
-<sub>Generate less blindly. Execute, observe, repair and verify.</sub>
-
-<br><br>
-
-<a href="#execsql-agent">Back to top ↑</a>
+<sub>Execute, observe, repair and verify.</sub>
 
 </div>
