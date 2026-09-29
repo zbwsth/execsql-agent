@@ -1,17 +1,64 @@
 <div align="center">
 
-# ExecSQL-Agent
+<h1>ExecSQL-Agent</h1>
 
-**基于 Qwen3-8B、vLLM 与 Tool Calling 的多数据库 Text-to-SQL Agent**
+<p><strong>基于 Qwen3-8B、vLLM 与 Tool Calling 的多数据库 Text-to-SQL Agent</strong></p>
 
-面向真实数据库交互，覆盖 Schema Discovery、SQL Validation、Execution Feedback、离线评测与 Assistant-only SFT。
+<p>以真实数据库执行反馈驱动 Schema Discovery、SQL Validation、错误修复与后训练评测</p>
+
+<p>
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/Model-Qwen3--8B-6C5CE7" alt="Qwen3-8B">
+  <img src="https://img.shields.io/badge/Inference-vLLM-00A67E" alt="vLLM">
+  <img src="https://img.shields.io/badge/Training-4--bit%20QLoRA-F39C12" alt="4-bit QLoRA">
+  <img src="https://img.shields.io/badge/Database-SQLite-003B57?logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/Tests-210%20passed-2EA44F" alt="210 tests passed">
+</p>
+
+<p>
+  <a href="#项目简介">项目简介</a> ·
+  <a href="#核心能力">核心能力</a> ·
+  <a href="#系统架构">系统架构</a> ·
+  <a href="#base-vs-sft-实验结果">实验结果</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#sft-pipeline">SFT Pipeline</a>
+</p>
 
 </div>
 
-> **项目状态**
+---
+
+> [!IMPORTANT]
+> **当前状态：SQL Agent 与 QLoRA SFT 主线已经完成。**
 >
-> - SQL Agent、四工具调用链、只读 SQLite 执行、BIRD 多数据库评测与 QLoRA SFT 已完成。
-> - Agentic GRPO / RLVR 仍处于实验阶段；当前仓库不声明正式 GRPO 模型效果。
+> 四工具调用链、只读 SQLite 执行、BIRD 多数据库评测与 Assistant-only SFT 已完成；Agentic GRPO / RLVR 仍处于实验阶段，当前仓库不声明正式 GRPO 模型效果。
+
+<table>
+  <tr>
+    <td align="center"><strong>4</strong><br><sub>结构化数据库工具</sub></td>
+    <td align="center"><strong>2,500</strong><br><sub>Expert Agent Trajectories</sub></td>
+    <td align="center"><strong>943</strong><br><sub>Held-out Evaluation Cases</sub></td>
+    <td align="center"><strong>+14.00pp</strong><br><sub>SQL Execution Accuracy</sub></td>
+  </tr>
+</table>
+
+<details>
+<summary><strong>浏览完整目录</strong></summary>
+
+- [项目简介](#项目简介)
+- [核心能力](#核心能力)
+- [系统架构](#系统架构)
+- [SFT 数据与训练](#sft-数据与训练)
+- [Base vs SFT 实验结果](#base-vs-sft-实验结果)
+- [快速开始](#快速开始)
+- [运行离线评测](#运行离线评测)
+- [SFT Pipeline](#sft-pipeline)
+- [GRPO / RLVR 状态](#grpo--rlvr-状态)
+- [项目结构](#项目结构)
+- [质量检查](#质量检查)
+- [当前边界](#当前边界)
+
+</details>
 
 ## 项目简介
 
@@ -99,28 +146,56 @@ SQL 执行边界包括：
 
 ```mermaid
 flowchart LR
-    Q[User Question] --> A[Qwen3 SQL Agent]
-    A <--> L[vLLM / OpenAI-compatible API]
-    A --> R[ToolRegistry]
+    Q[User Question] --> A
 
-    R --> T1[list_tables]
-    R --> T2[inspect_schema]
-    R --> T3[validate_sql]
-    R --> T4[execute_sql]
+    subgraph Runtime["Agent Runtime"]
+        A[Qwen3 SQL Agent]
+        L[vLLM / OpenAI-compatible API]
+        M[Session Memory]
+        A <--> L
+        A <--> M
+    end
 
+    subgraph Tools["Structured Tool Layer"]
+        R[ToolRegistry]
+        T1[list_tables]
+        T2[inspect_schema]
+        T3[validate_sql]
+        T4[execute_sql]
+        R --> T1
+        R --> T2
+        R --> T3
+        R --> T4
+    end
+
+    A --> R
     T1 --> DB[(Read-only SQLite)]
     T2 --> DB
     T3 --> DB
     T4 --> DB
-
-    DB --> O[Structured Tool Observation]
+    DB --> O[Tool Observation]
     O --> A
 
-    A --> M[Session Memory]
-    A --> TL[Trajectory Log]
-    TL --> E[Offline Evaluator]
-    GC[Private Gold Cache] --> E
-    E --> RP[JSON / CSV / Markdown Reports]
+    subgraph Evaluation["Offline Evaluation"]
+        TL[Trajectory Log]
+        GC[Private Gold Cache]
+        E[Result-based Evaluator]
+        RP[JSON / CSV / Markdown Reports]
+        TL --> E
+        GC --> E
+        E --> RP
+    end
+
+    A --> TL
+
+    classDef model fill:#6c5ce7,color:#fff,stroke:#4b3f9f;
+    classDef tool fill:#e8f4fd,color:#16324f,stroke:#4d96d1;
+    classDef data fill:#e9f8ef,color:#173d26,stroke:#43a66b;
+    classDef private fill:#fff4df,color:#5d4200,stroke:#e3a52f;
+    class A,L model;
+    class R,T1,T2,T3,T4 tool;
+    class DB,O,TL,E,RP data;
+    class GC private;
 ```
 
 Gold SQL、expected result、数据库路径和 scorer metadata 均位于私有评分侧，不会注入 Agent 的 system/user prompt。
@@ -214,6 +289,9 @@ Base 与 SFT 保持完全相同的：
 
 唯一变量是是否加载正式 SFT LoRA Adapter。
 
+> [!NOTE]
+> **核心结果：** SFT 将 SQL Execution Accuracy 从 **23.44%** 提升至 **37.43%**，并将无法产出最终 SQL 的 case 从 **149** 降至 **14**。
+
 | Metric | Qwen3-8B Base | Qwen3-8B + SFT | Change |
 |---|---:|---:|---:|
 | SQL Execution Accuracy | 23.44% (221/943) | **37.43% (353/943)** | **+14.00pp** |
@@ -222,18 +300,24 @@ Base 与 SFT 保持完全相同的：
 | Final Execution Success | 67.44% | **88.02%** | **+20.57pp** |
 | no-final-SQL | 149 | **14** | **-90.6%** |
 
-指标说明：
+<details>
+<summary><strong>查看指标定义</strong></summary>
 
 - **SQL Execution Accuracy**：预测 SQL 与 scorer-side 参考 SQL 在真实 SQLite 上的完整结果集合等价。
 - **Protocol Completion**：Agent 正常结束多轮工具协议并给出最终回答。
 - **First Execution Success**：第一次 `execute_sql` 即成功执行。
 - **Final Execution Success**：trajectory 结束前至少保留了一次最终成功执行结果，不代表语义一定正确。
 
+</details>
+
 结果表明，SFT 显著改善了工具协议学习、Schema 交互和 SQL 可执行性；当前主要剩余错误已由基础设施失败转向 SQL semantic mismatch。
 
 > 该结果来自项目冻结的数据库级 held-out split，不等同于 BIRD 官方 Test leaderboard 成绩。
 
 ## 快速开始
+
+> [!TIP]
+> 本地 deterministic demo 和完整 CPU 测试均不需要 GPU；只有真实模型推理与 QLoRA 训练需要单独准备对应运行环境。
 
 ### 环境要求
 
@@ -415,3 +499,11 @@ git diff --check
 ## Acknowledgements
 
 本项目基于 Qwen3、vLLM、BIRD、Transformers、PEFT、bitsandbytes 与 VERL 等开源项目构建。
+
+---
+
+<p align="center">
+  <sub>ExecSQL-Agent · Tool-augmented Text-to-SQL with execution feedback</sub>
+</p>
+
+<p align="right"><a href="#execsql-agent">返回顶部 ↑</a></p>
