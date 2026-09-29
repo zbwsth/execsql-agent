@@ -1,0 +1,105 @@
+# VERL v0.9.0 Hydra primary config for the future E2 rollout-only diagnostic.
+# This file composes the installed ppo_trainer config and performs validation only.
+defaults:
+  - ppo_trainer
+  - _self_
+
+hydra:
+  searchpath:
+    - pkg://verl.trainer.config
+
+data:
+  train_files: ${oc.env:GRPO_DATASET_PATH,/path/to/bird_grpo_agentic.parquet}
+  val_files: ${oc.env:GRPO_DATASET_PATH,/path/to/bird_grpo_agentic.parquet}
+  train_batch_size: 8
+  val_batch_size: 8
+  max_prompt_length: 2048
+  max_response_length: 4096
+  shuffle: false
+  validation_shuffle: false
+  seed: 0
+  apply_chat_template_kwargs:
+    enable_thinking: false
+
+actor_rollout_ref:
+  model:
+    path: ${oc.env:MODEL_PATH,/path/to/Qwen3-8B}
+    lora_adapter_path: ${oc.env:SFT_ADAPTER_PATH,/path/to/sft_adapter}
+    lora_rank: 16
+    lora_alpha: 32
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+      - gate_proj
+      - up_proj
+      - down_proj
+  actor:
+    use_kl_loss: false
+  rollout:
+    name: vllm
+    mode: async
+    n: 4
+    temperature: 0.7
+    top_p: 0.8
+    top_k: 20
+    seed: 0
+    full_determinism: true
+    tensor_model_parallel_size: 1
+    max_num_seqs: 8
+    max_num_batched_tokens: 8192
+    gpu_memory_utilization: 0.5
+    calculate_log_probs: false
+    val_kwargs:
+      n: 4
+      do_sample: true
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+    multi_turn:
+      enable: true
+      max_assistant_turns: 6
+      max_user_turns: 6
+      max_parallel_calls: 1
+      max_tool_response_length: 4096
+      tool_response_truncate_side: middle
+      use_inference_chat_template: true
+      tokenization_sanity_check_mode: disable
+      format: hermes
+      tool_config_path: ${oc.env:PROJECT_ROOT,.}/configs/verl_bird_agent_tools.yaml
+    agent:
+      default_agent_loop: tool_agent
+      num_workers: 1
+
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: false
+
+reward:
+  num_workers: 4
+  custom_reward_function:
+    path: ${oc.env:PROJECT_ROOT,.}/training/verl_bird_reward.py
+    name: compute_score
+    reward_kwargs:
+      database_root: ${oc.env:PROJECT_ROOT,.}
+      temporary_root: ${oc.env:RUNTIME_ROOT,/tmp/execsql-agent}/verl_reward
+      reward_view: r2_execution_shaped
+  reward_model:
+    enable: false
+
+trainer:
+  use_v1: true
+  val_before_train: true
+  val_only: true
+  total_epochs: 1
+  nnodes: 1
+  n_gpus_per_node: 1
+  logger:
+    - console
+  project_name: execsql-agent
+  experiment_name: bird-grpo-e2-rollout-diagnostic
+  save_freq: -1
+  test_freq: -1
+  validation_data_dir: ${oc.env:OUTPUT_ROOT,outputs}/bird_grpo_e2_rollout_diagnostic/validation
+  default_local_dir: ${oc.env:OUTPUT_ROOT,outputs}/bird_grpo_e2_rollout_diagnostic/checkpoints

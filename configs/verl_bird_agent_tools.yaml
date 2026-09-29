@@ -1,0 +1,20 @@
+# VERL v0.9.0 native BaseTool wrappers over the frozen Harness-v2 registry.
+tools:
+  - class_name: training.verl_bird_tools.BirdToolRegistryTool
+    config: &bird_tool_config
+      type: native
+      name: list_tables
+      database_archive: ${oc.env:BIRD_DATABASE_ARCHIVE,/path/to/train_databases.zip}
+      temporary_root: ${oc.env:RUNTIME_ROOT,/tmp/execsql-agent}/verl_tools
+  - class_name: training.verl_bird_tools.BirdToolRegistryTool
+    config:
+      <<: *bird_tool_config
+      name: inspect_schema
+  - class_name: training.verl_bird_tools.BirdToolRegistryTool
+    config:
+      <<: *bird_tool_config
+      name: validate_sql
+  - class_name: training.verl_bird_tools.BirdToolRegistryTool
+    config:
+      <<: *bird_tool_config
+      name: execute_sql

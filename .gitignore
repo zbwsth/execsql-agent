@@ -1,0 +1,78 @@
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Packaging
+*.egg-info/
+build/
+dist/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local generated demo/runtime data
+data/demo.db
+data/trajectories/
+data/reports/
+
+# Private benchmark and post-training data
+# BIRD annotations, databases, gold caches, manifests, JSONL, and Parquet stay local.
+data/bird/
+
+# Public synthetic fixtures remain trackable.
+!data/synthetic/
+!data/synthetic/**
+!data/grpo_smoke/
+!data/grpo_smoke/**
+
+# Experiment/runtime
+artifacts/
+wandb/
+ray_results/
+.hydra/
+multirun/
+outputs/
+checkpoints/
+logs/
+
+# Model / checkpoint
+models/
+Qwen3-8B/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+pytorch_model*.bin
+*.gguf
+
+# SQLite runtime sidecars
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+
+# Logs, processes, and temporary files
+*.log
+*.pid
+.DS_Store
+tmp/
+temp/
+.tmp/
+*.tmp
+
+# Test, editor, OS, and backup files
+.pytest-tmp/
+pytest_tmp/
+.idea/
+.vscode/
+Thumbs.db
+*.bak

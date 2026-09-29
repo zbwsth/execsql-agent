@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "dataset_revision": "f65faf4ae3b638c1fa6df1d3370c8d92c8366301",
+  "agent_mode": "function-calling",
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "max_tokens": 2048,
+  "seed": 0,
+  "enable_thinking": false,
+  "request_timeout_seconds": 120.0,
+  "max_retries": 2,
+  "max_agent_steps": 5,
+  "use_evidence": false,
+  "timeout_policy": {
+    "minimum_seconds": 30.0,
+    "gold_runtime_multiplier": 1.5,
+    "offset_seconds": 5.0,
+    "upper_cap_seconds": 900.0,
+    "ex_at_seconds": 30.0
+  },
+  "vllm_common": {
+    "dtype": "bfloat16",
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.9,
+    "max_model_len": 32768,
+    "enable_auto_tool_choice": true,
+    "tool_call_parser": "hermes",
+    "reasoning_parser": "qwen3"
+  }
+}

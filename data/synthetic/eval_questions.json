@@ -1,0 +1,247 @@
+{
+  "dataset_name": "synthetic-normal-v1",
+  "cases": [
+    {
+      "id": "single_table_customers",
+      "question": "列出编号前三的客户姓名和城市。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name", "city"], "rows": [["张伟", "北京"], ["王芳", "上海"], ["李娜", "广州"]], "ordered": true},
+      "gold_sql": "SELECT customer_name, city FROM customers WHERE customer_id <= 3 ORDER BY customer_id",
+      "fake_sql": "SELECT customer_name, city FROM customers WHERE customer_id <= 3 ORDER BY customer_id",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "filter"]
+    },
+    {
+      "id": "customer_count",
+      "question": "客户总数是多少？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "gold_sql": "SELECT COUNT(*) AS customer_count FROM customers",
+      "fake_sql": "SELECT COUNT(*) AS customer_count FROM customers",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "aggregation"]
+    },
+    {
+      "id": "top_product_prices",
+      "question": "价格最高的三种产品是什么？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["product_name", "unit_price"], "rows": [["升降桌", 3299.0], ["人体工学椅", 2399.0], ["27寸显示器", 1899.0]], "ordered": true},
+      "gold_sql": "SELECT product_name, unit_price FROM products ORDER BY unit_price DESC LIMIT 3",
+      "fake_sql": "SELECT product_name, unit_price FROM products ORDER BY unit_price DESC LIMIT 3",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "order_by", "top_k"]
+    },
+    {
+      "id": "top_customer_spend",
+      "question": "统计已完成订单消费金额最高的前五名客户。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name", "total_spent"], "rows": [["黄杰", 31584.0], ["杨帆", 28784.0], ["刘洋", 23790.0], ["王芳", 17493.0], ["赵敏", 10027.0]], "ordered": true, "numeric_tolerance": 0.001},
+      "gold_sql": "SELECT c.customer_name, ROUND(SUM(o.total_amount), 2) AS total_spent FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.status='completed' GROUP BY c.customer_id,c.customer_name ORDER BY total_spent DESC LIMIT 5",
+      "fake_sql": "SELECT c.customer_name, ROUND(SUM(o.total_amount), 2) AS total_spent FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.status='completed' GROUP BY c.customer_id,c.customer_name ORDER BY total_spent DESC LIMIT 5",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["join", "aggregation", "group_by", "order_by", "top_k"]
+    },
+    {
+      "id": "completed_orders_by_city",
+      "question": "按城市统计已完成订单数。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["city", "order_count"], "rows": [["南京", 3], ["成都", 3], ["武汉", 3], ["西安", 3], ["上海", 2], ["北京", 2], ["广州", 2], ["深圳", 2]], "ordered": true},
+      "gold_sql": "SELECT c.city, COUNT(*) AS order_count FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.status='completed' GROUP BY c.city ORDER BY order_count DESC, c.city",
+      "fake_sql": "SELECT c.city, COUNT(*) AS order_count FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.status='completed' GROUP BY c.city ORDER BY order_count DESC, c.city",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["join", "aggregation", "group_by"]
+    },
+    {
+      "id": "completed_product_revenue",
+      "question": "已完成订单中销售额最高的五种产品是什么？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["product_name", "revenue"], "rows": [["人体工学椅", 47980.0], ["升降桌", 29691.0], ["降噪耳机", 19485.0], ["27寸显示器", 18990.0], ["高清摄像头", 5990.0]], "ordered": true},
+      "gold_sql": "SELECT p.product_name, ROUND(SUM(oi.line_amount),2) AS revenue FROM orders o JOIN order_items oi ON oi.order_id=o.order_id JOIN products p ON p.product_id=oi.product_id WHERE o.status='completed' GROUP BY p.product_id,p.product_name ORDER BY revenue DESC, p.product_name LIMIT 5",
+      "fake_sql": "SELECT p.product_name, ROUND(SUM(oi.line_amount),2) AS revenue FROM orders o JOIN order_items oi ON oi.order_id=o.order_id JOIN products p ON p.product_id=oi.product_id WHERE o.status='completed' GROUP BY p.product_id,p.product_name ORDER BY revenue DESC, p.product_name LIMIT 5",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["three_table_join", "aggregation", "top_k"]
+    },
+    {
+      "id": "completed_product_quantity",
+      "question": "已完成订单中销量最高的三种产品是什么？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["product_name", "quantity"], "rows": [["人体工学椅", 20], ["降噪耳机", 15], ["无线鼠标", 11]], "ordered": true},
+      "gold_sql": "SELECT p.product_name, SUM(oi.quantity) AS quantity FROM orders o JOIN order_items oi ON oi.order_id=o.order_id JOIN products p ON p.product_id=oi.product_id WHERE o.status='completed' GROUP BY p.product_id,p.product_name ORDER BY quantity DESC, p.product_name LIMIT 3",
+      "fake_sql": "SELECT p.product_name, SUM(oi.quantity) AS quantity FROM orders o JOIN order_items oi ON oi.order_id=o.order_id JOIN products p ON p.product_id=oi.product_id WHERE o.status='completed' GROUP BY p.product_id,p.product_name ORDER BY quantity DESC, p.product_name LIMIT 3",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["three_table_join", "aggregation", "top_k"]
+    },
+    {
+      "id": "completed_orders_after_date",
+      "question": "列出 2025 年 3 月 1 日之后的已完成订单。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["order_id", "order_date", "total_amount"], "rows": [[22, "2025-03-08", 10594.0], [23, "2025-03-11", 2196.0], [24, "2025-03-14", 7097.0], [26, "2025-03-20", 11093.0], [27, "2025-03-23", 998.0], [29, "2025-03-29", 4374.0]], "ordered": true},
+      "gold_sql": "SELECT order_id, order_date, total_amount FROM orders WHERE order_date >= '2025-03-01' AND status='completed' ORDER BY order_date",
+      "fake_sql": "SELECT order_id, order_date, total_amount FROM orders WHERE order_date >= '2025-03-01' AND status='completed' ORDER BY order_date",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "date_filter", "order_by"]
+    },
+    {
+      "id": "empty_result_city",
+      "question": "列出来自不存在城市的客户。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name"], "rows": [], "ordered": true},
+      "gold_sql": "SELECT customer_name FROM customers WHERE customer_id < 0 ORDER BY customer_name",
+      "fake_sql": "SELECT customer_name FROM customers WHERE customer_id < 0 ORDER BY customer_name",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "empty_result"]
+    },
+    {
+      "id": "null_value",
+      "question": "返回第一位客户及一个空备注字段。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name", "note"], "rows": [["张伟", null]], "ordered": true},
+      "gold_sql": "SELECT customer_name, NULL AS note FROM customers WHERE customer_id=1",
+      "fake_sql": "SELECT customer_name, NULL AS note FROM customers WHERE customer_id=1",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "null"]
+    },
+    {
+      "id": "orders_above_average",
+      "question": "列出金额高于全部订单平均值的五个最高订单。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["order_id", "total_amount"], "rows": [[8, 13695.0], [20, 13695.0], [2, 11093.0], [14, 11093.0], [26, 11093.0]], "ordered": true},
+      "gold_sql": "SELECT order_id, total_amount FROM orders WHERE total_amount > (SELECT AVG(total_amount) FROM orders) ORDER BY total_amount DESC, order_id LIMIT 5",
+      "fake_sql": "SELECT order_id, total_amount FROM orders WHERE total_amount > (SELECT AVG(total_amount) FROM orders) ORDER BY total_amount DESC, order_id LIMIT 5",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["subquery", "order_by", "top_k"]
+    },
+    {
+      "id": "order_status_counts",
+      "question": "按状态统计订单数量。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["status", "count"], "rows": [["cancelled", 4], ["completed", 20], ["pending", 6]], "ordered": true},
+      "gold_sql": "SELECT status, COUNT(*) AS count FROM orders GROUP BY status ORDER BY status",
+      "fake_sql": "SELECT status, COUNT(*) AS count FROM orders GROUP BY status ORDER BY status",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "aggregation", "group_by"]
+    },
+    {
+      "id": "monthly_completed_revenue",
+      "question": "按月份统计已完成订单收入。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["month", "revenue"], "rows": [["2025-01", 54548.0], ["2025-02", 39970.0], ["2025-03", 36352.0]], "ordered": true},
+      "gold_sql": "SELECT SUBSTR(order_date,1,7) AS month, ROUND(SUM(total_amount),2) AS revenue FROM orders WHERE status='completed' GROUP BY month ORDER BY month",
+      "fake_sql": "SELECT SUBSTR(order_date,1,7) AS month, ROUND(SUM(total_amount),2) AS revenue FROM orders WHERE status='completed' GROUP BY month ORDER BY month",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["date_filter", "aggregation", "group_by"]
+    },
+    {
+      "id": "customers_without_pending",
+      "question": "哪些客户没有待处理订单？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name"], "rows": [["刘洋"], ["周静"], ["张伟"], ["李娜"], ["杨帆"], ["王芳"], ["赵敏"], ["黄杰"]], "ordered": true},
+      "gold_sql": "SELECT customer_name FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id=c.customer_id AND o.status='pending') ORDER BY customer_name",
+      "fake_sql": "SELECT customer_name FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id=c.customer_id AND o.status='pending') ORDER BY customer_name",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["subquery", "correlated_subquery"]
+    },
+    {
+      "id": "category_average_price",
+      "question": "计算每个产品类别的平均价格。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["category", "avg_price"], "rows": [["办公家具", 2849.0], ["显示设备", 1899.0], ["电脑配件", 352.33], ["视频设备", 599.0], ["音频设备", 1299.0]], "ordered": true, "numeric_tolerance": 0.01},
+      "gold_sql": "SELECT category, ROUND(AVG(unit_price),2) AS avg_price FROM products GROUP BY category ORDER BY category",
+      "fake_sql": "SELECT category, ROUND(AVG(unit_price),2) AS avg_price FROM products GROUP BY category ORDER BY category",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "aggregation", "group_by"]
+    },
+    {
+      "id": "customer_item_lines",
+      "question": "统计每位客户对应的订单明细行数。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name", "item_lines"], "rows": [["刘洋", 6], ["吴昊", 6], ["周静", 6], ["张伟", 6], ["李娜", 6], ["杨帆", 6], ["王芳", 6], ["赵敏", 6], ["陈晨", 6], ["黄杰", 6]], "ordered": true},
+      "gold_sql": "SELECT c.customer_name, COUNT(oi.item_id) AS item_lines FROM customers c JOIN orders o ON o.customer_id=c.customer_id JOIN order_items oi ON oi.order_id=o.order_id GROUP BY c.customer_id,c.customer_name ORDER BY item_lines DESC,c.customer_name",
+      "fake_sql": "SELECT c.customer_name, COUNT(oi.item_id) AS item_lines FROM customers c JOIN orders o ON o.customer_id=c.customer_id JOIN order_items oi ON oi.order_id=o.order_id GROUP BY c.customer_id,c.customer_name ORDER BY item_lines DESC,c.customer_name",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["three_table_join", "aggregation", "group_by"]
+    },
+    {
+      "id": "max_order_per_customer",
+      "question": "列出每位客户的最大订单，并取金额最高的五条。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name", "total_amount"], "rows": [["刘洋", 13695.0], ["吴昊", 13695.0], ["杨帆", 11093.0], ["王芳", 11093.0], ["黄杰", 11093.0]], "ordered": true},
+      "gold_sql": "SELECT c.customer_name, o.total_amount FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.total_amount=(SELECT MAX(o2.total_amount) FROM orders o2 WHERE o2.customer_id=c.customer_id) ORDER BY o.total_amount DESC,c.customer_name LIMIT 5",
+      "fake_sql": "SELECT c.customer_name, o.total_amount FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.total_amount=(SELECT MAX(o2.total_amount) FROM orders o2 WHERE o2.customer_id=c.customer_id) ORDER BY o.total_amount DESC,c.customer_name LIMIT 5",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["join", "correlated_subquery", "top_k"]
+    },
+    {
+      "id": "customers_by_city",
+      "question": "按城市统计客户数。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["city", "customer_count"], "rows": [["上海", 1], ["北京", 1], ["南京", 1], ["广州", 1], ["成都", 1], ["杭州", 1], ["武汉", 1], ["深圳", 1], ["苏州", 1], ["西安", 1]], "ordered": true},
+      "gold_sql": "SELECT city, COUNT(*) AS customer_count FROM customers GROUP BY city ORDER BY city",
+      "fake_sql": "SELECT city, COUNT(*) AS customer_count FROM customers GROUP BY city ORDER BY city",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "aggregation", "group_by"]
+    },
+    {
+      "id": "distinct_completed_customers",
+      "question": "有多少位客户拥有已完成订单？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[8]], "ordered": true},
+      "gold_sql": "SELECT COUNT(DISTINCT customer_id) AS customer_count FROM orders WHERE status='completed'",
+      "fake_sql": "SELECT COUNT(DISTINCT customer_id) AS customer_count FROM orders WHERE status='completed'",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "aggregation", "distinct"]
+    },
+    {
+      "id": "pending_totals",
+      "question": "按客户统计待处理订单总额。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name", "pending_total"], "rows": [["吴昊", 34384.0], ["陈晨", 9587.0]], "ordered": true},
+      "gold_sql": "SELECT c.customer_name, ROUND(SUM(o.total_amount),2) AS pending_total FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.status='pending' GROUP BY c.customer_id,c.customer_name ORDER BY pending_total DESC,c.customer_name",
+      "fake_sql": "SELECT c.customer_name, ROUND(SUM(o.total_amount),2) AS pending_total FROM customers c JOIN orders o ON o.customer_id=c.customer_id WHERE o.status='pending' GROUP BY c.customer_id,c.customer_name ORDER BY pending_total DESC,c.customer_name",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["join", "aggregation", "group_by"]
+    },
+    {
+      "id": "duplicate_status_multiset",
+      "question": "返回前八个订单的状态，比较时忽略顺序但保留重复项。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["status"], "rows": [["completed"], ["completed"], ["completed"], ["completed"], ["pending"], ["completed"], ["cancelled"], ["completed"]], "ordered": false},
+      "gold_sql": "SELECT status FROM orders WHERE order_id <= 8",
+      "fake_sql": "SELECT status FROM orders WHERE order_id <= 8",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "unordered", "duplicate_rows"]
+    },
+    {
+      "id": "cancelled_order_dates",
+      "question": "按日期列出已取消订单。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["order_id", "order_date"], "rows": [[7, "2025-01-22"], [14, "2025-02-12"], [21, "2025-03-05"], [28, "2025-03-26"]], "ordered": true},
+      "gold_sql": "SELECT order_id, order_date FROM orders WHERE status='cancelled' ORDER BY order_date",
+      "fake_sql": "SELECT order_id, order_date FROM orders WHERE status='cancelled' ORDER BY order_date",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["inspect_schema", "execute_sql"]],
+      "tags": ["single_table", "date_filter", "order_by"]
+    }
+  ]
+}

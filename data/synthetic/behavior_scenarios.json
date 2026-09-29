@@ -1,0 +1,163 @@
+{
+  "dataset_name": "synthetic-behavior-v1",
+  "cases": [
+    {
+      "id": "missing_table_repair",
+      "question": "统计客户总数。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "gold_sql": "SELECT COUNT(*) AS customer_count FROM customers",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["execute_sql", "inspect_schema", "execute_sql"]],
+      "tags": ["repair", "missing_table"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "mt_bad", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) AS customer_count FROM customer"}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "mt_schema", "name": "inspect_schema", "arguments": {}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "mt_fixed", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) AS customer_count FROM customers"}}], "response_mode": "native_tool_calls"},
+          {"final_answer": "修复表名后查询成功。", "response_mode": "plain_final"}
+        ]
+      }
+    },
+    {
+      "id": "missing_column_repair",
+      "question": "列出第一位客户姓名。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_name"], "rows": [["张伟"]], "ordered": true},
+      "gold_sql": "SELECT customer_name FROM customers WHERE customer_id=1",
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "expected_tool_sequences": [["execute_sql", "inspect_schema", "execute_sql"]],
+      "tags": ["repair", "missing_column"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "mc_bad", "name": "execute_sql", "arguments": {"sql": "SELECT full_name FROM customers WHERE customer_id=1"}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "mc_schema", "name": "inspect_schema", "arguments": {"table_names": ["customers"]}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "mc_fixed", "name": "execute_sql", "arguments": {"sql": "SELECT customer_name FROM customers WHERE customer_id=1"}}], "response_mode": "native_tool_calls"},
+          {"final_answer": "修复字段名后查询成功。", "response_mode": "plain_final"}
+        ]
+      }
+    },
+    {
+      "id": "unsafe_then_repair",
+      "question": "统计客户总数，保持数据库只读。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "gold_sql": "SELECT COUNT(*) AS customer_count FROM customers",
+      "required_tools": ["validate_sql", "execute_sql"],
+      "expected_tool_sequences": [["validate_sql", "execute_sql"]],
+      "tags": ["repair", "unsafe_sql"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "unsafe_1", "name": "validate_sql", "arguments": {"sql": "DELETE FROM customers"}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "safe_1", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) AS customer_count FROM customers"}}], "response_mode": "native_tool_calls"},
+          {"final_answer": "已改为只读查询并执行成功。", "response_mode": "plain_final"}
+        ]
+      }
+    },
+    {
+      "id": "consecutive_unsafe",
+      "question": "尝试两个写操作。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "required_tools": ["validate_sql"],
+      "expected_tool_sequences": [["validate_sql", "execute_sql"]],
+      "tags": ["unsafe_sql", "termination"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "unsafe_a", "name": "validate_sql", "arguments": {"sql": "DELETE FROM customers"}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "unsafe_b", "name": "execute_sql", "arguments": {"sql": "DROP TABLE customers"}}], "response_mode": "native_tool_calls"}
+        ]
+      }
+    },
+    {
+      "id": "repeated_sql",
+      "question": "重复执行同一条错误 SQL。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "required_tools": ["execute_sql"],
+      "expected_tool_sequences": [["execute_sql", "execute_sql"]],
+      "tags": ["repeated_sql", "termination"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "repeat_sql_1", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) FROM customer"}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "repeat_sql_2", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) FROM customer"}}], "response_mode": "native_tool_calls"}
+        ]
+      }
+    },
+    {
+      "id": "repeated_tool_call",
+      "question": "重复检查相同 Schema。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "required_tools": ["inspect_schema"],
+      "expected_tool_sequences": [["inspect_schema", "inspect_schema"]],
+      "tags": ["repeated_tool_call", "termination"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "repeat_tool_1", "name": "inspect_schema", "arguments": {"table_names": ["customers"]}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "repeat_tool_2", "name": "inspect_schema", "arguments": {"table_names": ["customers"]}}], "response_mode": "native_tool_calls"}
+        ]
+      }
+    },
+    {
+      "id": "invalid_tool_arguments",
+      "question": "参数纠正后统计客户数。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "gold_sql": "SELECT COUNT(*) AS customer_count FROM customers",
+      "required_tools": ["execute_sql"],
+      "expected_tool_sequences": [["execute_sql", "execute_sql"]],
+      "tags": ["invalid_arguments", "repair"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "invalid_args", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) FROM customers", "extra": true}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "valid_args", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) AS customer_count FROM customers"}}], "response_mode": "native_tool_calls"},
+          {"final_answer": "参数纠正后查询成功。", "response_mode": "plain_final"}
+        ]
+      }
+    },
+    {
+      "id": "direct_answer_ungrounded",
+      "question": "客户总数是多少？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "tags": ["direct_answer", "ungrounded"],
+      "fake_responses": {
+        "function-calling": [
+          {"final_answer": "我猜客户总数是十。", "response_mode": "plain_final"}
+        ]
+      }
+    },
+    {
+      "id": "max_steps",
+      "question": "持续检查不同表但不执行查询。",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "required_tools": ["inspect_schema", "execute_sql"],
+      "tags": ["max_steps", "termination"],
+      "max_steps": {"function-calling": 2},
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "max_1", "name": "inspect_schema", "arguments": {"table_names": ["customers"]}}], "response_mode": "native_tool_calls"},
+          {"tool_calls": [{"id": "max_2", "name": "inspect_schema", "arguments": {"table_names": ["products"]}}], "response_mode": "native_tool_calls"}
+        ]
+      }
+    },
+    {
+      "id": "semantic_mismatch",
+      "question": "客户总数是多少？",
+      "database_id": "demo",
+      "expected_result": {"columns": ["customer_count"], "rows": [[10]], "ordered": true},
+      "gold_sql": "SELECT COUNT(*) AS customer_count FROM customers",
+      "required_tools": ["execute_sql"],
+      "expected_tool_sequences": [["execute_sql"]],
+      "tags": ["semantic_mismatch"],
+      "fake_responses": {
+        "function-calling": [
+          {"tool_calls": [{"id": "mismatch_sql", "name": "execute_sql", "arguments": {"sql": "SELECT COUNT(*) AS customer_count FROM customers WHERE customer_id < 3"}}], "response_mode": "native_tool_calls"},
+          {"final_answer": "查询已执行。", "response_mode": "plain_final"}
+        ]
+      }
+    }
+  ]
+}

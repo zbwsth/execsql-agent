@@ -1,0 +1,67 @@
+# DEV / DIAGNOSTIC ONLY: the Qwen3-0.6B non-thinking GRPO run that
+# produced non-zero reward variance. The executable source of truth is
+# scripts/run_verl_grpo_diagnostic.sh.
+target:
+  verl_tag: v0.9.0
+  entrypoint: verl.trainer.main_ppo
+  model: Qwen/Qwen3-0.6B
+  purpose: diagnostic_smoke_only
+
+data:
+  train_files: data/grpo_smoke/diagnostic.parquet
+  val_files: data/grpo_smoke/val.parquet
+  train_batch_size: 1
+  val_batch_size: 1
+  max_prompt_length: 1024
+  max_response_length: 256
+  apply_chat_template_kwargs:
+    enable_thinking: false
+
+algorithm:
+  adv_estimator: grpo
+  norm_adv_by_std_in_grpo: true
+  use_kl_in_reward: false
+
+actor:
+  use_remove_padding: false
+  attn_implementation: sdpa
+  ppo_mini_batch_size: 1
+  ppo_micro_batch_size_per_gpu: 1
+  fsdp_param_offload: true
+  fsdp_optimizer_offload: true
+
+reference:
+  log_prob_micro_batch_size_per_gpu: 1
+  fsdp_param_offload: true
+
+rollout:
+  name: vllm
+  n: 4
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  tensor_model_parallel_size: 1
+  gpu_memory_utilization: 0.35
+  enforce_eager: true
+  max_model_len: 1280
+  max_num_batched_tokens: 1280
+  max_num_seqs: 8
+
+reward:
+  manager: naive
+  custom_reward_function:
+    path: training/verl_sql_reward.py
+    name: compute_score
+    database_root: .
+
+trainer:
+  use_v1: true
+  n_gpus_per_node: 1
+  nnodes: 1
+  total_training_steps: 1
+  save_freq: -1
+  test_freq: -1
+  val_before_train: false
+  resume_mode: disable
+  default_local_dir: outputs/verl_grpo_sql_diagnostic
+  rollout_data_dir: outputs/verl_grpo_sql_diagnostic_rollouts

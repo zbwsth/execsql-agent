@@ -1,0 +1,22 @@
+pipeline:
+  max_steps: 3
+
+function_calling:
+  max_steps: 5
+
+agent:
+  empty_result_repair: false
+
+executor:
+  max_rows: 100
+  progress_handler_ops: 10000
+  progress_handler_max_callbacks: 1000
+
+llm:
+  request_timeout_seconds: 30.0
+  max_retries: 2
+  retry_backoff_seconds: 0.0
+
+evaluation:
+  numeric_tolerance: 1.0e-6
+  strict_columns: false

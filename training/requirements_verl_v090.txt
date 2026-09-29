@@ -1,0 +1,9 @@
+# CPU contract overlay for VERL v0.9.0 agentic integration.
+# Torch is supplied by the instance runtime; E2 must resolve vLLM>=0.18.0
+# and its CUDA/Torch constraints before any GPU rollout.
+verl==0.9.0
+transformers==5.10.4
+peft==0.21.0
+numpy==2.2.6
+ray==2.58.0
+torchdata==0.11.0
